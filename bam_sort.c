@@ -53,6 +53,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "bam.h"
+#include <sys/time.h>
 
 //#define DEBUG_MINHASH
 
@@ -206,6 +207,21 @@ static int strnum_cmp(const char *_a, const char *_b)
 }
 
 #define HEAP_EMPTY (UINT64_MAX >> 1)
+
+
+void time_to_err(const char* message, const char* file) {
+    struct timeval current_time;
+
+    if (gettimeofday(&current_time, NULL) == -1)
+    {
+        (void) fprintf(stderr, "Failure to obtain the current time.\n");
+        return;
+    }
+    if (file == NULL) {
+        file = "any";
+    }
+    (void) fprintf(stderr, "[time-info] %s %s %ld.%06ld\n", message, file, current_time.tv_sec, current_time.tv_usec);
+}
 
 typedef struct {
     int i;
@@ -1855,6 +1871,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         }
     }
 
+    time_to_err("writestart", out);
     // Open output file and write header
     if ((fpout = sam_open_format(out, mode, out_fmt)) == 0) {
         print_error_errno(cmd, "failed to create \"%s\"", out);
@@ -1913,6 +1930,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
     // Clean up and close
     for (i = 0; i < n; i++) {
+        time_to_err("deleted", fn[i]);
         if (sam_close(fp[i]) != 0) {
             print_error(cmd, "Error on closing \"%s\" : %s",
                         fn[i], strerror(errno));
@@ -1933,6 +1951,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
         print_error(cmd, "error closing output file");
         return -1;
     }
+
+    time_to_err("mergeend", out);
     return 0;
  mem_fail:
     print_error(cmd, "Out of memory");
@@ -3074,6 +3094,8 @@ static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
                        int large_pos, int minimiser_kmer, bool try_rev,
                        bool no_squash)
 {
+    time_to_err("sortstart", NULL);
+
     int i;
     size_t pos, rest;
     pthread_t *tid;
@@ -3114,6 +3136,7 @@ static int sort_blocks(size_t k, bam1_tag *buf, const sam_hdr_t *h,
     free(w);
     free(tid);
 
+    time_to_err("sortend", NULL);
     return n_failed ? -1 : n_threads;
 }
 
@@ -3221,6 +3244,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     htsThreadPool htspool = { NULL, 0 };
     int num_in_mem = 0;
     int large_pos = 0;
+
+    time_to_err("start", NULL);
 
     if (!b) {
         print_error("sort", "couldn't allocate memory for bam record");
@@ -3582,6 +3607,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     if (htspool.pool)
         hts_tpool_destroy(htspool.pool);
 
+    time_to_err("end", NULL);
     return ret;
 }
 
