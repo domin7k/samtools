@@ -225,6 +225,7 @@ void time_to_err(const char* message, const char* file) {
 
 void size_to_err(const char* file) {
     struct stat st;
+    fprintf(stderr, "[size-info] ");
     if (stat(file, &st) == -1) {
         (void) fprintf(stderr, "[size-info] Failure to obtain the stats of %s.\n", file);
         return;
