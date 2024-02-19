@@ -223,6 +223,18 @@ void time_to_err(const char* message, const char* file) {
     (void) fprintf(stderr, "[time-info] %s %s %ld.%06ld\n", message, file, current_time.tv_sec, current_time.tv_usec);
 }
 
+void size_to_err(const char* file) {
+    struct stat st;
+    if (stat(file, &st) == -1) {
+        (void) fprintf(stderr, "[size-info] Failure to obtain the stats of %s.\n", file);
+        return;
+    }
+    if (file == NULL) {
+        (void) fprintf(stderr, "[size-info] ERROR, file name is NULL\n");
+    }
+    (void) fprintf(stderr, "[size-info] %s %" PRIdMAX "\n", file, (intmax_t)st.st_size);
+}
+
 typedef struct {
     int i;
     uint32_t tid;
@@ -1930,6 +1942,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
     // Clean up and close
     for (i = 0; i < n; i++) {
+        size_to_err(fn[i]);
         time_to_err("deleted", fn[i]);
         if (sam_close(fp[i]) != 0) {
             print_error(cmd, "Error on closing \"%s\" : %s",
@@ -3607,6 +3620,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     if (htspool.pool)
         hts_tpool_destroy(htspool.pool);
 
+    size_to_err(fnout);
     time_to_err("end", NULL);
     return ret;
 }
