@@ -47,6 +47,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "bam_sort.h"
+
 
 KHASH_SET_INIT_STR(str)
 typedef khash_t(str) *strhash_t;
@@ -96,31 +98,6 @@ typedef struct samview_settings {
     int count_rf; // CRAM_OPT_REQUIRED_FIELDS for view -c
 } samview_settings_t;
 
-// void time_to_err(const char* message, const char* file) {
-//     struct timeval current_time;
-
-//     if (gettimeofday(&current_time, NULL) == -1)
-//     {
-//         (void) fprintf(stderr, "Failure to obtain the current time.\n");
-//         return;
-//     }
-//     if (file == NULL) {
-//         file = "any";
-//     }
-//     (void) fprintf(stderr, "[time-info] %s %s %ld.%06ld\n", message, file, current_time.tv_sec, current_time.tv_usec);
-// }
-
-// void size_to_err(const char* file) {
-//     struct stat st;
-//     if (stat(file, &st) == -1) {
-//         (void) fprintf(stderr, "[size-info] Failure to obtain the stats of %s.\n", file);
-//         return;
-//     }
-//     if (file == NULL) {
-//         (void) fprintf(stderr, "[size-info] ERROR, file name is NULL\n");
-//     }
-//     (void) fprintf(stderr, "[size-info] %s %" PRIdMAX "\n", file, (intmax_t)st.st_size);
-// }
 
 // Copied from htslib/sam.c.
 // TODO: we need a proper interface to find the length of an aux tag,
@@ -1439,6 +1416,7 @@ view_end:
         }
     }
 
+    size_to_err(settings.fn_out);
     // close files, free and return
     if (settings.in) check_sam_close("view", settings.in, settings.fn_in, "standard input", &ret);
     if (settings.out) check_sam_close("view", settings.out, settings.fn_out, "standard output", &ret);
@@ -1489,6 +1467,7 @@ view_end:
     aux_list_free(&settings);
 
     time_to_err("end", NULL);
+    
 
     return ret;
 }

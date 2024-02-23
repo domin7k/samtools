@@ -54,6 +54,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 #include "bam.h"
 #include <sys/time.h>
+#include "bam_sort.h"
 
 //#define DEBUG_MINHASH
 
