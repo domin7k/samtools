@@ -44,6 +44,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h" // for bam_get_library and bam_remove_B
 #include "bedidx.h"
 #include "sam_utils.h"
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 KHASH_SET_INIT_STR(str)
 typedef khash_t(str) *strhash_t;
@@ -92,6 +95,32 @@ typedef struct samview_settings {
     int sanitize;
     int count_rf; // CRAM_OPT_REQUIRED_FIELDS for view -c
 } samview_settings_t;
+
+// void time_to_err(const char* message, const char* file) {
+//     struct timeval current_time;
+
+//     if (gettimeofday(&current_time, NULL) == -1)
+//     {
+//         (void) fprintf(stderr, "Failure to obtain the current time.\n");
+//         return;
+//     }
+//     if (file == NULL) {
+//         file = "any";
+//     }
+//     (void) fprintf(stderr, "[time-info] %s %s %ld.%06ld\n", message, file, current_time.tv_sec, current_time.tv_usec);
+// }
+
+// void size_to_err(const char* file) {
+//     struct stat st;
+//     if (stat(file, &st) == -1) {
+//         (void) fprintf(stderr, "[size-info] Failure to obtain the stats of %s.\n", file);
+//         return;
+//     }
+//     if (file == NULL) {
+//         (void) fprintf(stderr, "[size-info] ERROR, file name is NULL\n");
+//     }
+//     (void) fprintf(stderr, "[size-info] %s %" PRIdMAX "\n", file, (intmax_t)st.st_size);
+// }
 
 // Copied from htslib/sam.c.
 // TODO: we need a proper interface to find the length of an aux tag,
@@ -761,6 +790,7 @@ static int stream_view(samview_settings_t *conf) {
         print_error_errno("view", "could not allocate bam record");
         return 1;
     }
+    time_to_err("writestart", conf->fn_out);
     errno = 0; // prevent false error messages.
     while ((r = sam_read1(conf->in, conf->header, b)) >= 0) {
         if ((p = process_one_record(conf, b, &write_error)) < 0) break;
@@ -770,6 +800,7 @@ static int stream_view(samview_settings_t *conf) {
         print_error_errno("view", "error reading file \"%s\"", conf->fn_in);
         return 1;
     }
+    time_to_err("writeend", conf->fn_out);
     return write_error;
 }
 
@@ -824,6 +855,8 @@ int main_samview(int argc, char *argv[])
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
+
+    time_to_err("start", NULL);
 
     memset(&settings,0,sizeof(settings));
     settings.subsam_frac = -1.0;
@@ -1454,6 +1487,8 @@ view_end:
     free(arg_list);
 
     aux_list_free(&settings);
+
+    time_to_err("end", NULL);
 
     return ret;
 }
