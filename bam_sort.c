@@ -55,11 +55,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h"
 #include <sys/time.h>
 #include "bam_sort.h"
+#include <sys/resource.h>
 
 //#define DEBUG_MINHASH
 
 #define BAM_BLOCK_SIZE 2*1024*1024
-#define MAX_TMP_FILES 64
+//#define MAX_TMP_FILES 64
+
+
 
 // Struct which contains the sorting key for TemplateCoordinate sort.
 typedef struct {
@@ -234,6 +237,12 @@ void size_to_err(const char* file) {
         (void) fprintf(stderr, "[size-info] ERROR, file name is NULL\n");
     }
     (void) fprintf(stderr, "[size-info] %s %" PRIdMAX "\n", file, (intmax_t)st.st_size);
+}
+
+unsigned long int get_max_fopen(void) {
+    struct rlimit lim;
+    getrlimit(RLIMIT_NOFILE, &lim);
+    return lim.rlim_cur;
 }
 
 typedef struct {
@@ -1813,7 +1822,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 
 static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             const char *mode, sam_hdr_t *hout,
-                            int n, char * const *fn, int num_in_mem,
+                            unsigned long int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf,
                             template_coordinate_keys_t *keys,
                             khash_t(const_c2c) *lib_lookup,
@@ -1824,7 +1833,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     samFile *fpout = NULL, **fp = NULL;
     heap1_t *heap = NULL;
     uint64_t idx = 0;
-    int i, heap_size = n + num_in_mem;
+    unsigned long int i, heap_size = n + num_in_mem;
     char *out_idx_fn = NULL;
 
     if (sam_order == TagQueryName || sam_order == TagCoordinate) {
@@ -3240,7 +3249,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
                       char *arg_list, int no_pg, int write_index)
 {
-    int ret = -1, res, i, nref, n_files = 0, n_big_files = 0, fn_counter = 0;
+    int ret = -1, res;
+    unsigned long int i, nref, n_files = 0, n_big_files = 0, fn_counter = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
     samFile *fp = NULL;
@@ -3260,6 +3270,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     int large_pos = 0;
 
     time_to_err("start", NULL);
+
+    unsigned long int max_tmp_files = get_max_fopen() - 2; // output and maybe index
+    print_error("sort", "set MAX_TMP_FILES to %ld", max_tmp_files);
 
     if (!b) {
         print_error("sort", "couldn't allocate memory for bam record");
@@ -3491,18 +3504,19 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             const int MAX_TRIES = 1000;
             int tries = 0, merge_res = -1;
             char *sort_by_tag = (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) ? sort_tag : NULL;
-            int consolidate_from = n_files;
-            if (n_files - n_big_files >= MAX_TMP_FILES/2)
+            unsigned long int consolidate_from = n_files;
+            
+            if (n_files - n_big_files >= max_tmp_files /2)
                 consolidate_from = n_big_files;
-            else if (n_files >= MAX_TMP_FILES)
+            else if (n_files >= max_tmp_files)
                 consolidate_from = 0;
 
             for (;;) {
                 if (tries) {
-                    snprintf(fns[n_files], name_len, "%s.%.4d-%.3d.bam",
+                    snprintf(fns[n_files], name_len, "%s.%.4ld-%.3d.bam",
                              prefix, fn_counter, tries);
                 } else {
-                    snprintf(fns[n_files], name_len, "%s.%.4d.bam", prefix,
+                    snprintf(fns[n_files], name_len, "%s.%.4ld.bam", prefix,
                              fn_counter);
                 }
                 if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
@@ -3570,13 +3584,13 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         }
     } else { // then merge
         fprintf(stderr,
-                "[bam_sort_core] merging from %d files and %d in-memory blocks...\n",
+                "[bam_sort_core] merging from %ld files and %d in-memory blocks...\n",
                 n_files, num_in_mem);
         // Paranoia check - all temporary files should have a name
         for (i = 0; i < n_files; ++i) {
             if (!fns[i]) {
                 print_error("sort",
-                            "BUG: no name stored for temporary file %d", i);
+                            "BUG: no name stored for temporary file %ld", i);
                 abort();
             }
         }
