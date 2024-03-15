@@ -3456,7 +3456,6 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
 
         // Check if the BAM record will fit in the memory limit
         if (bam_mem_offset + sizeof(*b) + b->l_data < max_mem) {
-            print_error("record-size", "b size: %d, l_data: %d", (int)(sizeof(*b)),(int) b->l_data);
             // Copy record into the memory block
             buf[k].bam_record = (bam1_t *)(bam_mem + bam_mem_offset);
             *buf[k].bam_record = *b;
