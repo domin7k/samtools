@@ -3520,7 +3520,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                              fn_counter);
                 }
                 if (bam_merge_simple(g_sam_order, sort_by_tag, fns[n_files],
-                                     large_pos ? "wz" : "wbx0", header,
+                                     large_pos ? "w" : "w", header,
                                      n_files - consolidate_from,
                                      &fns[consolidate_from], n_threads,
                                      in_mem, buf, keys,
