@@ -53,7 +53,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "bam.h"
-
+#include "htslib/bgzf.h"
 //#define DEBUG_MINHASH
 
 #define BAM_BLOCK_SIZE 2*1024*1024
@@ -1887,6 +1887,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
             return -1;
         }
     }
+    
+    print_error("[fout-info]", "compression-level=%d", fpout->fp.bgzf->compress_level);
 
     // Now do the merge
     ks_heapmake(heap, heap_size, heap);
