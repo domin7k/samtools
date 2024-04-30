@@ -3271,7 +3271,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
 
     time_to_err("start", NULL);
 
-    unsigned long int max_tmp_files = get_max_fopen() - 2; // output and maybe index
+    unsigned long int max_tmp_files = get_max_fopen() - 5; // output, input, error, index and one for safety
     print_error("sort", "set MAX_TMP_FILES to %ld", max_tmp_files);
 
     if (!b) {
