@@ -3256,6 +3256,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     buf_region *in_mem = NULL;
     khash_t(const_c2c) *lib_lookup = NULL;
     htsThreadPool htspool = { NULL, 0 };
+    htsThreadPool singlepool = { NULL, 0 };
     int num_in_mem = 0;
     int large_pos = 0;
 
@@ -3404,6 +3405,12 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     }
 
     if (n_threads > 1) {
+        singlepool.pool = hts_tpool_init(1);
+        if (!singlepool.pool) {
+            print_error_errno("sort", "failed to set up single-thread pool");
+            goto err;
+        }
+        hts_set_opt(fp, HTS_OPT_THREAD_POOL, &singlepool);
         htspool.pool = hts_tpool_init(n_threads);
         if (!htspool.pool) {
             print_error_errno("sort", "failed to set up thread pool");
@@ -3583,7 +3590,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         char *sort_by_tag = (sam_order == TagQueryName || sam_order == TagCoordinate) ? sort_tag : NULL;
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf, keys,
-                             lib_lookup, &htspool, "sort", in_fmt, out_fmt,
+                             lib_lookup, &singlepool, "sort", in_fmt, out_fmt,
                              arg_list, no_pg, write_index, 1) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
