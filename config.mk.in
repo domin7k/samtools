@@ -44,7 +44,7 @@ LIBS     = @LIBS@
 @Hsource@HTSDIR = @HTSDIR@
 @Hsource@include $(HTSDIR)/htslib.mk
 @Hsource@include $(HTSDIR)/htslib_static.mk
-@Hsource@HTSLIB = $(HTSDIR)/libhts.a
+@Hsource@HTSLIB = $(HTSDIR)/libhts.so
 @Hsource@HTSLIB_LIB = $(HTSLIB) $(HTSLIB_static_LIBS)
 @Hsource@HTSLIB_LDFLAGS = $(HTSLIB_static_LDFLAGS)
 @Hsource@BGZIP = $(HTSDIR)/bgzip
