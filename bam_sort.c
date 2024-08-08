@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2023 Genome Research Ltd.
+    Copyright (C) 2008-2024 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -240,8 +240,12 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         case QueryName:
             t = strnum_cmp(bam_get_qname(a.entry.bam_record), bam_get_qname(b.entry.bam_record));
             if (t != 0) return t > 0;
-            fa = a.entry.bam_record->core.flag & 0xc0;
-            fb = b.entry.bam_record->core.flag & 0xc0;
+            fa = a.entry.bam_record->core.flag;
+            fb = b.entry.bam_record->core.flag;
+            // Sort order is READ1, READ2, (PRIMARY), SUPPLEMENTARY, SECONDARY
+            // Get the bits in this order so sort is a natural a-b
+            fa = ((fa&0xc0)<<8)|((fa&0x100)<<3)|((fa&0x800)>>3);
+            fb = ((fb&0xc0)<<8)|((fb&0x100)<<3)|((fb&0x800)>>3);
             if (fa != fb) return fa > fb;
             break;
         case TagQueryName:
@@ -262,7 +266,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
             break;
     }
 
-    // This compares by position in the input file(s)
+    // This compares by position (i/idx'th read) in the input file(s)
     if (a.i != b.i) return a.i > b.i;
     return a.idx > b.idx;
 }
@@ -324,7 +328,7 @@ static void trans_tbl_destroy(trans_tbl_t *tbl) {
  *  Create a merged_header_t struct.
  */
 
-static merged_header_t * init_merged_header() {
+static merged_header_t * init_merged_header(void) {
     merged_header_t *merged_hdr;
 
     merged_hdr = calloc(1, sizeof(*merged_hdr));
@@ -401,7 +405,7 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
 
     do {
         dest->l = 0;
-        ksprintf(dest, "%s-%0lX", prefix, lrand48());
+        ksprintf(dest, "%s-%08lX", prefix, lrand48());
         iter = kh_get(cset, existing_ids, ks_str(dest));
     } while (iter != kh_end(existing_ids));
 
@@ -1324,7 +1328,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     // Make sure that there's enough memory for template coordinate keys, one per file to read
     if (sam_order == TemplateCoordinate) {
         if ((keys = malloc(sizeof(template_coordinate_keys_t))) == NULL) {
-            print_error("sort", "could not allocate memory for the top-level keys");
+            print_error(cmd, "could not allocate memory for the top-level keys");
             goto mem_fail;
         }
         keys->n = 0;
@@ -1360,8 +1364,8 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
                 h->entry.u.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
             } else if (g_sam_order == TemplateCoordinate) {
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, i); // get the next key to use
-                h->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
-                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
+                h->entry.u.key = template_coordinate_key(h->entry.bam_record, key, hout, lib_lookup); // update the key
+                if (h->entry.u.key == NULL) goto fail; // key could not be created, error out
             } else {
                 h->entry.u.tag = NULL;
             }
@@ -1435,7 +1439,7 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
             } else if (g_sam_order == TemplateCoordinate) {
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, heap->i); // get the next key to use
                 heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
-                if (heap->entry.u.key == NULL) goto mem_fail; // key could not be created, error out
+                if (heap->entry.u.key == NULL) goto fail; // key could not be created, error out
             } else {
                 heap->entry.u.tag = NULL;
             }
@@ -1477,9 +1481,17 @@ int bam_merge_core2(SamOrder sam_order, char* sort_tag, const char *out, const c
     bed_destroy(hreg);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
-        print_error(cmd, "error closing output file");
+        print_error_errno(cmd, "error closing output file \"%s\"", out);
         return -1;
     }
+    if (keys != NULL) {
+        for (i = 0; i < keys->m; ++i) {
+            free(keys->buffers[i]);
+        }
+        free(keys->buffers);
+        free(keys);
+    }
+    lib_lookup_destroy(lib_lookup);
     return 0;
 
  mem_fail:
@@ -1930,7 +1942,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
 
     if (sam_close(fpout) < 0) {
-        print_error(cmd, "error closing output file");
+        print_error_errno(cmd, "error closing output file \"%s\"", out);
         return -1;
     }
     return 0;
@@ -1965,7 +1977,13 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
     if (g_sam_order == QueryName || g_sam_order == TagQueryName) {
         int t = strnum_cmp(bam_get_qname(a.bam_record), bam_get_qname(b.bam_record));
         if (t != 0) return t;
-        return (int) (a.bam_record->core.flag&0xc0) - (int) (b.bam_record->core.flag&0xc0);
+        int af = a.bam_record->core.flag;
+        int bf = b.bam_record->core.flag;
+        // Sort order is READ1, READ2, (PRIMARY), SUPPLEMENTARY, SECONDARY
+        // Get the bits in this order so sort is a natural a-b
+        af = ((af&0xc0)<<8)|((af&0x100)<<3)|((af&0x800)>>3);
+        bf = ((bf&0xc0)<<8)|((bf&0x100)<<3)|((bf&0x800)>>3);
+        return af - bf;
     } else {
         pa = a.bam_record->core.tid;
         pb = b.bam_record->core.tid;
